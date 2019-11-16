@@ -2,7 +2,7 @@
 
 """
 
-__version__ = "0.0.3"
+__version__ = "0.0.4"
 
 from os import system
 from os import walk
@@ -10,18 +10,39 @@ from os.path import exists
 from os.path import join
 
 
+class Template:
+    """Клас шаблону форматування
+    
+    Attributes
+    ----------
+    name : str
+        Ім'я шаблону
+    """
+
+    def __init__(self):
+        self.name = 'default'
+
+
 class Html:
-    """Класс який перевіряє та форматує Html файли
+    """Клас який перевіряє та форматує Html файли
     
     Methods
     -------
-    check(path: str)
-        Перевіряє html файл
+    check(path: str, template: Template)
+        Перевіряє html файл за вказаним шаблоном
     """
     
     @classmethod
-    def check(cls, path):
-        """Перевіряє html файл"""
+    def check(cls, path: str, template: Template):
+        """Перевіряє html файл за вказаним шаблоном
+        
+        Parameters
+        ----------
+        path : str
+            Шлях до файлу
+        template : Template
+            Шаблон перевірки
+        """
         pass
 
 
@@ -30,11 +51,19 @@ class Linter:
     
     Клас який керує шаблонами, настройками та форматуванням
     
+    Attributes
+    ----------
+    current_template : Template
+        Активний шаблон
+
     Methods
     -------
     start_menu()
         Відображає в консолі головне меню
     """
+
+    def __init__(self):
+        self.current_template: Template = Template()
 
     def start_menu(self):
         """Відображає в консолі головне меню"""
@@ -42,6 +71,7 @@ class Linter:
         while True:
             system('cls')
             print('HTML Linter v{}'.format(__version__))
+            print('Вибраний шаблон: {}'.format(self.current_template.name))
             print('1.Перевірити каталог з Html файлами')
             print('0.Вихід')
 
@@ -90,7 +120,7 @@ class Linter:
         for root, _, files in walk(path):
             for file in files:
                 if file.__contains__('.') and file.split('.')[1] == 'html':
-                    Html.check(join(root, file))
+                    Html.check(join(root, file), self.current_template)
                     html_files_count += 1
 
         print('Перевірено {} файлів'.format(html_files_count))
