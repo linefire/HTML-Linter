@@ -2,12 +2,15 @@
 
 """
 
-__version__ = "0.0.5"
+__version__ = "0.0.6"
 
 from os import system
 from os import walk
+from os import makedirs
 from os.path import exists
 from os.path import join
+from json import dump
+from re import search
 
 
 class Template:
@@ -17,10 +20,49 @@ class Template:
     ----------
     name : str
         Ім'я шаблону
+    TEMPLATES_DIR : str
+        Шлях до каталогу з шаблонами
+
+    Methods
+    -------
+    create_template(name: str) : Template
+        Метод для створення нових шаблонів
+    save()
+        Метод для зберігання шаблонів
     """
 
+    TEMPLATES_DIR: str = 'templates'
+
     def __init__(self):
-        self.name = 'default'
+        self.name: str = 'default'
+
+    @classmethod
+    def create_template(cls, name: str) -> 'Template':
+        """Метод для створення нових шаблонів
+        
+        Parameters
+        ----------
+        name : str
+            Ім'я нового шаблону
+        """
+
+        new_template = cls()
+        new_template.name = name
+        new_template.save()
+
+        return new_template
+
+    def save(self):
+        """Метод для зберігання шаблонів"""
+
+        makedirs(self.TEMPLATES_DIR, exist_ok=True)
+
+        data = {
+            'name': self.name,
+        }
+
+        with open(join(self.TEMPLATES_DIR, self.name + '.json'), 'w') as file:
+            dump(data, file)
 
 
 class Html:
@@ -66,6 +108,8 @@ class Linter:
         Перевіряє вибраний каталог з Html файлами
     _templates_menu()
         Відображає в консолі меню для операції з шаблонами
+    _create_template_menu(self):
+        Відображає в консолі меню для створення шаблону
     """
 
     def __init__(self):
@@ -147,10 +191,37 @@ class Linter:
 
             if command == '0':
                 break
+            elif command == '3':
+                self._create_template_menu()
             else:
                 print('Невірна команда.')
                 input('\nНатисніть Enter щоби продовжити.')
                 continue
+
+    def _create_template_menu(self):
+        """Відображає в консолі меню для створення шаблону"""
+
+        while True:
+            system('cls')
+            print('HTML Linter v{}'.format(__version__))
+
+            name = input(('\nВведить назву шаблону, або нічого щоб '
+                          'повернутися до попереднього меню: ')).strip()
+
+            if not name:
+                break
+            
+            search_match = search(r'[^ `\w]', name)
+            if search_match:
+                print('Ім`я повинно містити тільки літери, '
+                      'числа, пробіл або апостроф.')
+
+                input('\nНатисніть Enter щоби продовжити.')
+                continue
+
+            self.current_template = Template.create_template(name)
+            break
+
 
 if __name__ == "__main__":
     linter = Linter()
