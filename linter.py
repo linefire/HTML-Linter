@@ -2,7 +2,7 @@
 
 """
 
-__version__ = "0.0.4"
+__version__ = "0.0.5"
 
 from os import system
 from os import walk
@@ -60,6 +60,12 @@ class Linter:
     -------
     start_menu()
         Відображає в консолі головне меню
+    _check_folder_menu()
+        Відображає в консолі меню для вибору каталогу з Html файлами
+    _check_folder(path: str)
+        Перевіряє вибраний каталог з Html файлами
+    _templates_menu()
+        Відображає в консолі меню для операції з шаблонами
     """
 
     def __init__(self):
@@ -72,20 +78,18 @@ class Linter:
             system('cls')
             print('HTML Linter v{}'.format(__version__))
             print('Вибраний шаблон: {}'.format(self.current_template.name))
-            print('1.Перевірити каталог з Html файлами')
-            print('0.Вихід')
+            print('\n1.Перевірити каталог з Html файлами')
+            print('2.Шаблони')
+            print('\n0.Вихід')
 
-            try:
-                command = int(input('Введіть номер команди: '))
-            except ValueError:
-                print('Введіть НОМЕР команди.')
-                input('\nНатисніть Enter щоби продовжити.')
-                continue
+            command = input('\nВиберіть пункт: ').strip()
             
-            if command == 0:
+            if command == '0':
                 exit()
-            elif command == 1:
+            elif command == '1':
                 self._check_folder_menu()
+            elif command == '2':
+                self._templates_menu()
             else:
                 print('Невірна команда.')
                 input('\nНатисніть Enter щоби продовжити.')
@@ -126,6 +130,27 @@ class Linter:
         print('Перевірено {} файлів'.format(html_files_count))
         input('\nНатисніть Enter щоби продовжити.')
 
+    def _templates_menu(self):
+        """Відображає в консолі меню для операції з шаблонами"""
+
+        while True:
+            system('cls')
+            print('HTML Linter v{}'.format(__version__))
+            print('Вибраний шаблон: {}'.format(self.current_template.name))
+            print('\n1. Вибрати шаблон')
+            print('2. Редагувати шаблон')
+            print('3. Створити шаблон')
+            print('4. Видалити шаблон')
+            print('\n0. Назад')
+
+            command = input('\nВиберіть пункт: ').strip()
+
+            if command == '0':
+                break
+            else:
+                print('Невірна команда.')
+                input('\nНатисніть Enter щоби продовжити.')
+                continue
 
 if __name__ == "__main__":
     linter = Linter()
