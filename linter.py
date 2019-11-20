@@ -2,15 +2,19 @@
 
 """
 
-__version__ = "0.0.6"
+__version__ = "0.0.7"
 
 from os import system
 from os import walk
 from os import makedirs
+from os import listdir
 from os.path import exists
 from os.path import join
 from json import dump
+from json import load
 from re import search
+
+from typing import List
 
 
 class Template:
@@ -29,6 +33,10 @@ class Template:
         Метод для створення нових шаблонів
     save()
         Метод для зберігання шаблонів
+    get_templates() : List[str]:
+        Метод для отримання доступних шаблонів
+    load(name: str) : Template:
+        Метод для завантаження шаблонів
     """
 
     TEMPLATES_DIR: str = 'templates'
@@ -63,6 +71,45 @@ class Template:
 
         with open(join(self.TEMPLATES_DIR, self.name + '.json'), 'w') as file:
             dump(data, file)
+
+    @staticmethod
+    def get_templates() -> List[str]:
+        """Метод для отримання доступних шаблонів
+        
+        Returns
+        -------
+        templates : List[str]
+            Назви шаблонів які доступні для програми
+        """
+
+        templates: List[str] = ['default']
+
+        for filename in listdir(Template.TEMPLATES_DIR):
+            if filename.count('.') == 1:
+                name, extension = filename.split('.')
+                if extension == 'json':
+                    templates.append(name)
+        
+        return templates
+
+    @classmethod
+    def load(cls, name: str) -> 'Template':
+        """Метод для завантаження шаблонів
+
+        Returns
+        -------
+        template : 'Template'
+            Об'єкт цього класу, завантажений з файлу
+        """
+
+        with open(join(cls.TEMPLATES_DIR, name + '.json'), 'r') as file:
+            data: dict = load(file)
+
+        template = Template()
+
+        template.name = data.get('name', template.name)
+
+        return template
 
 
 class Html:
@@ -110,6 +157,8 @@ class Linter:
         Відображає в консолі меню для операції з шаблонами
     _create_template_menu(self):
         Відображає в консолі меню для створення шаблону
+    _select_template_menu(self):
+        Відображає в консолі меню для вибору шаблону
     """
 
     def __init__(self):
@@ -191,6 +240,8 @@ class Linter:
 
             if command == '0':
                 break
+            elif command == '1':
+                self._select_template_menu()
             elif command == '3':
                 self._create_template_menu()
             else:
@@ -221,6 +272,38 @@ class Linter:
 
             self.current_template = Template.create_template(name)
             break
+
+    def _select_template_menu(self):
+        """Відображає в консолі меню для вибору шаблону"""
+
+        while True:
+            system('cls')
+            print('HTML Linter v{}'.format(__version__))
+
+            templates = Template.get_templates()
+            for num, template in enumerate(templates, start=1):
+                print('{}. {}'.format(num, template))
+
+            print('\n0. Назад')
+
+            try:
+                command = int(input('\nВиберіть шаблон: ').strip())
+            except ValueError:
+                print('Невірна команда.')
+
+                input('\nНатисніть Enter щоби продовжити.')
+                continue
+
+            if command == 0:
+                break
+            elif 1 <= command <= len(templates):
+                self.current_template = Template.load(templates[command - 1])
+                break
+            else:
+                print('Невірна команда.')
+
+                input('\nНатисніть Enter щоби продовжити.')
+                continue
 
 
 if __name__ == "__main__":
