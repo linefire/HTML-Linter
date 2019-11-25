@@ -2,7 +2,7 @@
 
 """
 
-__version__ = "0.1.1"
+__version__ = "0.1.2"
 
 from os import system
 from os import walk
@@ -126,7 +126,7 @@ class Template:
 
     def __init__(self):
         self.name: str = 'default'
-        self.use_tab_character: bool = True
+        self.use_tab_character: bool = False
         self.smart_tab: bool = False
         self.indent: int = 4
         self.continuation_indend: int = 8
@@ -418,11 +418,63 @@ class Tag:
     def lint(self, template: Template):
         """Метод який послідовно запускає методи форматування текста"""
 
+        self.lint_smart_tab(template)
         self.lint_use_tab_character(template)
 
         for child in self.childs:
             child.lint(template)
 
+    def lint_smart_tab(self, template: Template):
+        """Метод для Template.smart_tabs
+        
+        Якщо Template.smart_tabs == True
+        розумно замінює пробіли на табуляцію перед атрибутами в тегах
+
+        Якщо Template.smart_tabs == False
+        розумно замінює табуляцію на пробіли перед атрибутами в тегах
+        
+        """
+        
+        if not self.parent:
+            return
+
+        tag_string = self.get_tag_string()
+        new_tag_string = tag_string
+        tag_col = self.get_col()
+        start = 0
+        while True:
+            end_char_index = new_tag_string.find('\n', start)
+
+            if end_char_index == -1:
+                break
+            start = end_char_index + 1
+
+            space = search(r'\s*', new_tag_string[end_char_index + 1:])
+            space_len = len(space.group(0))
+            space_str = space.group(0).replace('\t', '    ')
+            if len(space_str) >= tag_col:
+                if template.use_tab_character:
+                    if template.smart_tab:
+                        count_tabs = int(tag_col / 4)
+                        space_str = ('\t' * count_tabs + 
+                                     space_str[4 * count_tabs:])
+                    else:
+                        count_tabs = int(len(space_str) / 4)
+                        space_str = ('\t' * count_tabs + 
+                                     space_str[4 * count_tabs:])
+            else:
+                if template.use_tab_character:
+                    count_tabs = int(len(space_str) / 4)
+                    space_str = ('\t' * count_tabs + 
+                                 space_str[4 * count_tabs:])
+
+            
+            new_tag_string = (new_tag_string[:start] + space_str + 
+                              new_tag_string[start + space_len:])
+
+        self.text = self.text.replace(tag_string, new_tag_string)
+            
+        
     def lint_use_tab_character(self, template: Template):
         """Метод для Template.use_tab_character
         
@@ -466,6 +518,10 @@ class Tag:
 
             start += space_before_tag.start() + len(space_before_tag_text)
 
+    def get_tag_string(self):
+        """Вертає текст тега та атрібутів"""
+        return search(r'<[\s\S]*?>', self.text).group(0)
+
     def get_text(self) -> str:
         """Вертає текст тегу з дочірніми элементами"""
         text = self.text.format(
@@ -500,6 +556,54 @@ class Tag:
                 col += 1
 
         return line, col
+
+    def get_col(self) -> int:
+        """Вертає позицію тега на лінії"""
+        return self.parent._get_col(self)
+
+    def _get_col(self, target: 'Tag') -> int:
+        """Вертає позицію пошукового тега на лінії
+        
+        Шукає у себе або батька '\n', коли знайде 
+        вертає позицію до пошукового тега 
+
+        Returns
+        -------
+        col : int
+            Позиція пошукового тега на лінії
+        """
+
+        col: int = 1
+        text: str = ''
+        current_child_index = 0
+        i = 0
+        while True:
+            if self.text[i] == '{' and self.text[i + 1] == '}':
+                current_child = self.childs[current_child_index]
+                if current_child == target:
+                    break
+
+                text += current_child.get_text()
+
+                i += 2
+                current_child_index += 1
+            else:
+                text += self.text[i]
+                i += 1
+
+        text = text.replace('\t', '    ')
+        end_line_char_pos = text.rfind('\n')
+        if end_line_char_pos == -1:
+            if not self.parent:
+                return len(text)
+
+            col = self.parent._get_col(self)
+            for _ in text:
+                col += 1
+        else:
+            col = len(text[end_line_char_pos:])
+
+        return col
 
     def _get_text_before_target(self, target: 'Tag') -> (str, bool):
         """Метод вертає текст до пошукового тега
@@ -607,8 +711,10 @@ class Html:
         with open(path, 'r') as file:
             data = file.read()
 
-        if html.parse(data):
-            html._root_tag.lint(template)
+        if not html.parse(data):
+            return 
+
+        html._root_tag.lint(template)
 
         with open(path, 'w') as file:
             file.write(html._root_tag.get_text())
