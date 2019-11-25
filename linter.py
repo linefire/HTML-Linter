@@ -2,7 +2,7 @@
 
 """
 
-__version__ = "0.1.2"
+__version__ = "0.1.3"
 
 from os import system
 from os import walk
@@ -418,11 +418,22 @@ class Tag:
     def lint(self, template: Template):
         """Метод який послідовно запускає методи форматування текста"""
 
+        self.lint_keep_indents_on_empty_lines(template)
         self.lint_smart_tab(template)
         self.lint_use_tab_character(template)
 
         for child in self.childs:
             child.lint(template)
+
+    def lint_keep_indents_on_empty_lines(self, template: Template):
+        """Метод для Template.keep_indents_on_empty_lines
+        
+        Якщо Template.keep_indents_on_empty_lines == False
+        Видаляє відступи на пустих строках
+        """
+
+        if not template.keep_indents_on_empty_lines:
+            self.text = sub(r'(?<=\n)\s*(?=\n)', '', self.text)
 
     def lint_smart_tab(self, template: Template):
         """Метод для Template.smart_tabs
@@ -434,7 +445,7 @@ class Tag:
         розумно замінює табуляцію на пробіли перед атрибутами в тегах
         
         """
-        
+
         if not self.parent:
             return
 
