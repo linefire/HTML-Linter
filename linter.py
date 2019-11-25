@@ -2,7 +2,7 @@
 
 """
 
-__version__ = "0.1"
+__version__ = "0.1.1"
 
 from os import system
 from os import walk
@@ -15,6 +15,7 @@ from json import load
 from re import search
 from re import compile as re_compile
 from re import Pattern
+from re import sub
 
 from typing import List
 from typing import Optional
@@ -125,7 +126,7 @@ class Template:
 
     def __init__(self):
         self.name: str = 'default'
-        self.use_tab_character: bool = False
+        self.use_tab_character: bool = True
         self.smart_tab: bool = False
         self.indent: int = 4
         self.continuation_indend: int = 8
@@ -388,6 +389,12 @@ class Tag:
         Метод вертає текст до пошукового тега
     get_root_tag() : Tag
         Метод вертає корневий тег дерева тегів
+    lint(template: Template)
+        Метод який послідовно запускає методи форматування текста
+    get_text() : str
+        Вертає текст тегу з дочірніми элементами
+    lint_use_tab_character(template: Template)
+        Метод для Template.use_tab_character
     """
 
     def __init__(self, name: str, text: str, parent: Optional['Tag']):
@@ -407,6 +414,64 @@ class Tag:
         self.text: str = text
         self.childs: List[Tag] = []
         self.parent: Optional[Tag] = parent
+
+    def lint(self, template: Template):
+        """Метод який послідовно запускає методи форматування текста"""
+
+        self.lint_use_tab_character(template)
+
+        for child in self.childs:
+            child.lint(template)
+
+    def lint_use_tab_character(self, template: Template):
+        """Метод для Template.use_tab_character
+        
+        Якщо Template.use_tab_character == True
+        замінює пробіли на табуляцію перед тегами
+
+        Якщо Template.use_tab_character == False
+        замінює табуляцію на пробіли перед тегами
+        
+        """
+        start = 0
+        while True:
+            space_before_tag = search(
+                r'(?<=\n)\s+(?={}|<[\s\S]*?>)', 
+                self.text[start:],
+            )
+
+            if not space_before_tag:
+                break
+            
+            space_before_tag_text = space_before_tag.group(0)
+
+            if template.use_tab_character:
+                space_before_tag_text = sub(
+                    r'    ', 
+                    r'\t', 
+                    space_before_tag_text,
+                )   
+            else:
+                space_before_tag_text = sub(
+                    r'\t', 
+                    r'    ', 
+                    space_before_tag_text,
+                )
+
+            self.text = (
+                self.text[:start + space_before_tag.start()] +
+                space_before_tag_text + 
+                self.text[start + space_before_tag.end():]
+            )
+
+            start += space_before_tag.start() + len(space_before_tag_text)
+
+    def get_text(self) -> str:
+        """Вертає текст тегу з дочірніми элементами"""
+        text = self.text.format(
+            *[c.get_text() for c in self.childs]
+        )
+        return text
 
     def get_pos(self) -> (int, int):
         """Метод який визначає лінію та стовбчик де починається тег
@@ -490,7 +555,6 @@ class Tag:
         return self
 
 
-
 class Html:
     """Клас який перевіряє та форматує Html файли
 
@@ -543,9 +607,13 @@ class Html:
         with open(path, 'r') as file:
             data = file.read()
 
-        html.parse(data)
+        if html.parse(data):
+            html._root_tag.lint(template)
 
-    def parse(self, html: str):
+        with open(path, 'w') as file:
+            file.write(html._root_tag.get_text())
+
+    def parse(self, html: str) -> bool:
         """Метод аналізує Html код, та робить дерево тегів
 
         Метод аналізує Html код, шукаючи кожен тег у файлі.
@@ -559,6 +627,11 @@ class Html:
         ----------
         html : str
             Html код
+
+        Returns
+        -------
+        bool
+            True якщо парсинг був успішним
         """
 
         while True:
@@ -580,7 +653,7 @@ class Html:
                     self._opened_tags[-1].text += html[:next_tag.end()]
                 else:
                     self.error_no_closed_tags(next_tag_name)
-                    return
+                    return False
                 del self._opened_tags[-1]
 
             elif next_tag.group(3): # Початково кінцевий тег <div />
@@ -599,6 +672,9 @@ class Html:
         
         if len(self._opened_tags) != 1:
             self.error_no_closed_tags('')
+            return False
+
+        return True
 
     def error_no_closed_tags(self, tag_name: str):
         """Метод друкує інформацію про плоху розмітку Html
