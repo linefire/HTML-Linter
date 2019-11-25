@@ -2,7 +2,7 @@
 
 """
 
-__version__ = "0.0.8"
+__version__ = "0.1"
 
 from os import system
 from os import walk
@@ -13,8 +13,11 @@ from os.path import join
 from json import dump
 from json import load
 from re import search
+from re import compile as re_compile
+from re import Pattern
 
 from typing import List
+from typing import Optional
 
 
 class Template:
@@ -363,17 +366,168 @@ class Template:
         return template
 
 
+class Tag:
+    """Класс який описує тег
+    
+    Attributes
+    ----------
+    name : str
+        Ім'я тегу
+    text : str
+        Текст тегу
+    childs : List[Tag]
+        Список дочірніх тегів
+    parent : Optional[Tag]
+        Батько тегу
+
+    Methods
+    -------
+    get_pos() : (int, int)
+        Метод який визначає лінію та стовбчик де починається тег
+    _get_text_before_target(target: 'Tag') : (str, bool)
+        Метод вертає текст до пошукового тега
+    get_root_tag() : Tag
+        Метод вертає корневий тег дерева тегів
+    """
+
+    def __init__(self, name: str, text: str, parent: Optional['Tag']):
+        """Конструктор класу
+        
+        Parameters
+        ----------
+        name : str
+            Ім'я тегу
+        text : str
+            Текст тегу
+        parent : Optional[Tag]
+            Батько тегу
+        """
+
+        self.name: str = name
+        self.text: str = text
+        self.childs: List[Tag] = []
+        self.parent: Optional[Tag] = parent
+
+    def get_pos(self) -> (int, int):
+        """Метод який визначає лінію та стовбчик де починається тег
+        
+        Метод робить запрос текста до себе у корневого тега, 
+        потім рахує лінії та стовбчики.
+
+        Returns
+        -------
+        line, col : (int, int)
+            Лінія та стовбчик де починається тег
+        """
+
+        root_tag = self.get_root_tag()
+        text_before, _ = root_tag._get_text_before_target(self)
+
+        line = 1
+        col = 1
+        for char in text_before:
+            if char == '\n':
+                line += 1
+                col = 1
+            elif char == '\t':
+                col += 4
+            else:
+                col += 1
+
+        return line, col
+
+    def _get_text_before_target(self, target: 'Tag') -> (str, bool):
+        """Метод вертає текст до пошукового тега
+        
+        Метод рекурсивно шукає тег в дереві тегів, 
+        та паралельно собирає текст до нього.
+        Коли знаходить, вертає текст.
+
+        Parameters
+        ----------
+        target : Tag
+            Тег перед яким треба вернути текст
+
+        Returns
+        -------
+        text, target_is_found : (str, bool)
+            Вертає текст та True якщо тег було знайдено
+        """
+
+        text: str = ''
+        if self.childs:
+            current_child_index = 0
+            i = 0
+            while True:
+                if i >= len(self.text):
+                    return text, False
+
+                if self.text[i] == '{' and self.text[i + 1] == '}':
+                    current_child = self.childs[current_child_index]
+                    if current_child == target:
+                        return text, True
+
+                    (
+                        child_text, target_is_found
+                    ) = current_child._get_text_before_target(target)
+                    text += child_text
+                    if target_is_found:
+                        return text, True
+
+                    i += 2
+                    current_child_index += 1
+                else:
+                    text += self.text[i]
+                    i += 1
+        else:
+            return text + self.text, False
+
+    def get_root_tag(self) -> 'Tag':
+        """Метод вертає корневий тег дерева тегів"""
+
+        if self.parent:
+            return self.parent.get_root_tag()
+        return self
+
+
+
 class Html:
     """Клас який перевіряє та форматує Html файли
+
+    Attributes
+    ----------
+    TAG_PATTERN : Pattern
+        Регулярний шаблон для пошуку тегів у тексті
+    path : str
+        Шлях до файлу
+    _root_tag : Tag
+        Корневий тег дерева тегів
+    _opened_tags : List[Tag]
+        Список відкритих тегів (для аналізу файла)
     
     Methods
     -------
-    check(path: str, template: Template)
+    check_file(path: str, template: Template)
         Перевіряє html файл за вказаним шаблоном
     """
-    
+
+    TAG_PATTERN: Pattern = re_compile(r'<(\/|)(\w+|)[\s\S]*?(\/|)>') 
+
+    def __init__(self, path: str):
+        """Конструктор класу
+        
+        Parameters
+        ----------
+        path : str
+            Шлях до файлу
+        """
+
+        self.path: str = path
+        self._root_tag: Tag = Tag('', '', None)
+        self._opened_tags: List[Tag] = [self._root_tag]
+
     @classmethod
-    def check(cls, path: str, template: Template):
+    def check_file(cls, path: str, template: Template):
         """Перевіряє html файл за вказаним шаблоном
         
         Parameters
@@ -383,7 +537,89 @@ class Html:
         template : Template
             Шаблон перевірки
         """
-        pass
+
+        html = cls(path)
+
+        with open(path, 'r') as file:
+            data = file.read()
+
+        html.parse(data)
+
+    def parse(self, html: str):
+        """Метод аналізує Html код, та робить дерево тегів
+
+        Метод аналізує Html код, шукаючи кожен тег у файлі.
+        В залежності від типу тега, будує дерево тегів.
+
+        Якщо закриваючий тег не співпадає з останнім відкритим тегом,
+        друкується інформація помилки, та парсинг не може бути
+        продовжен - погана розмітка Html.
+
+        Parameters
+        ----------
+        html : str
+            Html код
+        """
+
+        while True:
+            next_tag = search(self.TAG_PATTERN, html)
+
+            if not next_tag:
+                break
+
+            next_tag_text = next_tag.group(0)
+            next_tag_name = next_tag.group(2)
+
+            if not next_tag_name: # Інші теги
+                self._opened_tags[-1].text += html[:next_tag.end()]
+                html = html[next_tag.end():]
+                continue
+
+            if next_tag.group(1): # Кінцевий тег </div>
+                if self._opened_tags[-1].name == next_tag_name:
+                    self._opened_tags[-1].text += html[:next_tag.end()]
+                else:
+                    self.error_no_closed_tags(next_tag_name)
+                    return
+                del self._opened_tags[-1]
+
+            elif next_tag.group(3): # Початково кінцевий тег <div />
+                self._opened_tags[-1].text += html[:next_tag.start()] + '{}'
+                self._opened_tags[-1].childs.append(
+                    Tag(next_tag_name, next_tag_text, self._opened_tags[-1])
+                )
+
+            else: # Початковий тег <div>
+                self._opened_tags[-1].text += html[:next_tag.start()] + '{}'
+                tag = Tag(next_tag_name, next_tag_text, self._opened_tags[-1])
+                self._opened_tags[-1].childs.append(tag)
+                self._opened_tags.append(tag)
+
+            html = html[next_tag.end():]
+        
+        if len(self._opened_tags) != 1:
+            self.error_no_closed_tags('')
+
+    def error_no_closed_tags(self, tag_name: str):
+        """Метод друкує інформацію про плоху розмітку Html
+        
+        Parameters
+        ----------
+        tag_name : str
+            Ім'я тегу після якого існують не закриті теги.
+        """
+
+        print('Error: Нейдійсна розмітка "{}"'.format(self.path))
+        for tag in reversed(self._opened_tags):
+            if tag.name == tag_name:
+                break
+        
+        tag_index = self._opened_tags.index(tag)
+        for bad_tag in self._opened_tags[tag_index + 1:]:
+            line, col = bad_tag.get_pos()
+            print('Незакритий тег "{}" на лінії {} та стовбчику {}'.format(
+                bad_tag.name, line, col
+            ))
 
 
 class Linter:
@@ -468,7 +704,7 @@ class Linter:
         for root, _, files in walk(path):
             for file in files:
                 if file.__contains__('.') and file.split('.')[1] == 'html':
-                    Html.check(join(root, file), self.current_template)
+                    Html.check_file(join(root, file), self.current_template)
                     html_files_count += 1
 
         print('Перевірено {} файлів'.format(html_files_count))
