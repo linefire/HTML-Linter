@@ -2,7 +2,7 @@
 
 """
 
-__version__ = "0.1.5"
+__version__ = "0.1.6"
 
 from os import system
 from os import walk
@@ -16,6 +16,7 @@ from re import search
 from re import compile as re_compile
 from re import Pattern
 from re import sub
+from html.parser import HTMLParser
 
 from typing import List
 from typing import Optional
@@ -802,27 +803,39 @@ class Tag:
         return self
 
 
-class Html:
+class Html(HTMLParser):
     """Клас який перевіряє та форматує Html файли
 
     Attributes
     ----------
-    TAG_PATTERN : Pattern
-        Регулярний шаблон для пошуку тегів у тексті
     path : str
         Шлях до файлу
     _root_tag : Tag
         Корневий тег дерева тегів
     _opened_tags : List[Tag]
         Список відкритих тегів (для аналізу файла)
-    
+    break_html : bool
+        Змііня якщо виявилося що Html код недійсний
+
     Methods
     -------
     check_file(path: str, template: Template)
         Перевіряє html файл за вказаним шаблоном
+    error_no_closed_tags(tag_name: str)
+        Метод друкує інформацію про плоху розмітку Html
+    handle_starttag(tag: str, attrs: dict)
+        Метод ловить початкові теги
+    handle_endtag(tag: str)
+        Метод ловить кінцеві теги
+    handle_startendtag(tag: str, attrs: dict)
+        Метод ловить початково-кінцеві теги
+    handle_data(data: str)
+        Метод ловить текст
+    handle_comment(data: str)
+        Метод ловить коментарії
+    handle_decl(data: str):
+        Метод ловить інформацію файла
     """
-
-    TAG_PATTERN: Pattern = re_compile(r'<(\/|)(\w+|)[\s\S]*?(\/|)>') 
 
     def __init__(self, path: str):
         """Конструктор класу
@@ -832,10 +845,54 @@ class Html:
         path : str
             Шлях до файлу
         """
+        super().__init__()
 
         self.path: str = path
         self._root_tag: Tag = Tag('', '', None)
         self._opened_tags: List[Tag] = [self._root_tag]
+        self.break_html = False
+
+    def handle_starttag(self, tag: str, attrs: dict):
+        """Метод ловить початкові теги"""
+        
+        tag = Tag(tag, self.get_starttag_text(), self._opened_tags[-1])
+        self._opened_tags[-1].childs.append(tag)
+        self._opened_tags[-1].text += '{}'
+        self._opened_tags.append(tag)
+
+    def handle_endtag(self, tag: str):
+        """Метод ловить кінцеві теги"""
+
+        tag_text = '</{}>'.format(tag)
+        if self._opened_tags[-1].name == tag:
+            self._opened_tags[-1].text += tag_text
+        else:
+            if not self.break_html:
+                self.error_no_closed_tags(tag)
+                self.break_html = True
+        del self._opened_tags[-1]
+
+    def handle_startendtag(self, tag: str, attrs: dict):
+        """Метод ловить початково-кінцеві теги"""
+
+        tag = Tag(tag, self.get_starttag_text(), self._opened_tags[-1])
+        self._opened_tags[-1].text += '{}'
+        self._opened_tags[-1].childs.append(tag)  
+
+    def handle_data(self, data: str):
+        """Метод ловить текст"""
+
+        self._opened_tags[-1].text += data
+    
+    def handle_comment(self, data: str):
+        """Метод ловить коментарії"""
+
+        self._opened_tags[-1].text += '<!-- {} -->'.format(data)
+
+    def handle_decl(self, data: str):
+        """Метод ловить інформацію файла"""
+
+        self._opened_tags[-1].text += '<!{}>'.format(data)
 
     @classmethod
     def check_file(cls, path: str, template: Template):
@@ -854,76 +911,20 @@ class Html:
         with open(path, 'r') as file:
             data = file.read()
 
-        if not html.parse(data):
-            return 
+        html.feed(data)
 
+        if not html.break_html:
+            if len(html._opened_tags) != 1:
+                html.error_no_closed_tags('')
+                html.break_html = True
+                return
+        else:
+            return
+        
         html._root_tag.lint(template)
 
         with open(path, 'w') as file:
             file.write(html._root_tag.get_text())
-
-    def parse(self, html: str) -> bool:
-        """Метод аналізує Html код, та робить дерево тегів
-
-        Метод аналізує Html код, шукаючи кожен тег у файлі.
-        В залежності від типу тега, будує дерево тегів.
-
-        Якщо закриваючий тег не співпадає з останнім відкритим тегом,
-        друкується інформація помилки, та парсинг не може бути
-        продовжен - погана розмітка Html.
-
-        Parameters
-        ----------
-        html : str
-            Html код
-
-        Returns
-        -------
-        bool
-            True якщо парсинг був успішним
-        """
-
-        while True:
-            next_tag = search(self.TAG_PATTERN, html)
-
-            if not next_tag:
-                break
-
-            next_tag_text = next_tag.group(0)
-            next_tag_name = next_tag.group(2)
-
-            if not next_tag_name: # Інші теги
-                self._opened_tags[-1].text += html[:next_tag.end()]
-                html = html[next_tag.end():]
-                continue
-
-            if next_tag.group(1): # Кінцевий тег </div>
-                if self._opened_tags[-1].name == next_tag_name:
-                    self._opened_tags[-1].text += html[:next_tag.end()]
-                else:
-                    self.error_no_closed_tags(next_tag_name)
-                    return False
-                del self._opened_tags[-1]
-
-            elif next_tag.group(3): # Початково кінцевий тег <div />
-                self._opened_tags[-1].text += html[:next_tag.start()] + '{}'
-                self._opened_tags[-1].childs.append(
-                    Tag(next_tag_name, next_tag_text, self._opened_tags[-1])
-                )
-
-            else: # Початковий тег <div>
-                self._opened_tags[-1].text += html[:next_tag.start()] + '{}'
-                tag = Tag(next_tag_name, next_tag_text, self._opened_tags[-1])
-                self._opened_tags[-1].childs.append(tag)
-                self._opened_tags.append(tag)
-
-            html = html[next_tag.end():]
-        
-        if len(self._opened_tags) != 1:
-            self.error_no_closed_tags('')
-            return False
-
-        return True
 
     def error_no_closed_tags(self, tag_name: str):
         """Метод друкує інформацію про плоху розмітку Html
