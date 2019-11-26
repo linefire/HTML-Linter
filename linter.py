@@ -2,7 +2,7 @@
 
 """
 
-__version__ = "0.1.4"
+__version__ = "0.1.5"
 
 from os import system
 from os import walk
@@ -407,6 +407,8 @@ class Tag:
         Метод який вертає відступи перед пошуковим тегом
     get_lines_count() : int
         Метод який віддає кількість строчок цього тега
+    lint_continuation_indend(template: Template)
+        Робить відступи перед атрибутами тегу на нових строчках
     """
 
     def __init__(self, name: str, text: str, parent: Optional['Tag']):
@@ -431,12 +433,21 @@ class Tag:
         """Метод який послідовно запускає методи форматування текста"""
 
         self.lint_indents(template)
+        self.lint_continuation_indend(template)
         self.lint_keep_indents_on_empty_lines(template)
         self.lint_smart_tab(template)
         self.lint_use_tab_character(template)
 
         for child in self.childs:
             child.lint(template)
+
+    def lint_continuation_indend(self, template: Template):
+        """Робить відступи перед атрибутами тегу на нових строчках"""
+
+        old_tag_string = self.get_tag_string()
+        indents = ' ' * (self.get_col() - 1 + template.continuation_indend)
+        new_tag_string = sub(r'(?<=\n)\s*', indents, old_tag_string)
+        self.text = self.text.replace(old_tag_string, new_tag_string)
 
     def get_lines_count(self) -> int:
         """Метод який віддає кількість строчок цього тега"""
