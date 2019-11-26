@@ -2,7 +2,7 @@
 
 """
 
-__version__ = "0.1.3"
+__version__ = "0.1.4"
 
 from os import system
 from os import walk
@@ -395,6 +395,18 @@ class Tag:
         Вертає текст тегу з дочірніми элементами
     lint_use_tab_character(template: Template)
         Метод для Template.use_tab_character
+    lint_indents(template: Template)
+        Method який робить відступи від батька
+    replace_space_before_tag(space: str)
+        Метод який заставляє батька замінити пространство перед тегом
+    _replace_space_before_tag(target: Tag, new_space: str)
+        Метод який замінює відступи перед тегом
+    get_space_before_tag() : str
+        Метод який вертає відступи перед тегом
+    _get_space_before_tag(target: Tag) : str
+        Метод який вертає відступи перед пошуковим тегом
+    get_lines_count() : int
+        Метод який віддає кількість строчок цього тега
     """
 
     def __init__(self, name: str, text: str, parent: Optional['Tag']):
@@ -418,12 +430,97 @@ class Tag:
     def lint(self, template: Template):
         """Метод який послідовно запускає методи форматування текста"""
 
+        self.lint_indents(template)
         self.lint_keep_indents_on_empty_lines(template)
         self.lint_smart_tab(template)
         self.lint_use_tab_character(template)
 
         for child in self.childs:
             child.lint(template)
+
+    def get_lines_count(self) -> int:
+        """Метод який віддає кількість строчок цього тега"""
+
+        return 1 + self.get_text().count('\n')
+
+    def lint_indents(self, template: Template):
+        """Method який робить відступи від батька"""
+
+        if not self.parent:
+            return
+
+        space_before_tag = self.get_space_before_tag()
+        if not space_before_tag.__contains__('\n'):
+            return
+
+        indents = int((self.parent.get_col() - 1) / template.indent)
+
+        # Не відступати якщо родич є у списку тегів від яких не відступати
+        dont_indent = (self.parent.name in template.dont_indent_child + [''])
+        # Якщо задано розмір тегу у строчках і тег більше за цей розмір
+        if template.dont_indent_child_tag_size:
+            if (self.parent.get_lines_count() 
+                        > template.dont_indent_child_tag_size):
+                dont_indent = True
+        
+        if not dont_indent:
+            indents += 1
+
+        new_space = '\n' + ((' ' * template.indent) * indents)
+
+        self.replace_space_before_tag(new_space)
+
+        self.text = sub(r'(?<=\n)\s*(?=<\/)', new_space, self.text)
+
+    def replace_space_before_tag(self, space: str):
+        """Метод який заставляє батька замінити пространство перед тегом"""
+
+        if not self.parent:
+            return
+        self.parent._replace_space_before_tag(self, space)
+
+    def _replace_space_before_tag(self, target: 'Tag', new_space: str):
+        """Метод який замінює відступи перед тегом
+        
+        Parameters
+        ----------
+        target : Tag
+            Тег перед яким треба замінити відступи
+        new_space: str
+            Відступи на які треба замінити
+        """
+
+        start = 0
+        for child in self.childs:
+            index = self.text.find('{}', start)
+            start = index + 2
+
+            if child == target:
+                space = search(r'\s*', self.text[index - 1::-1]).group(0)
+                space_len = len(space)
+
+                self.text = (self.text[:index - space_len] + new_space + 
+                             self.text[index:])
+
+                break
+
+    def get_space_before_tag(self) -> str:
+        """Метод який вертає відступи перед тегом"""
+
+        if self.parent:
+            return self.parent._get_space_before_tag(self)
+        return ''
+
+    def _get_space_before_tag(self, target: 'Tag') -> str:
+        """Метод який вертає відступи перед пошуковим тегом"""
+
+        start = 0
+        for child in self.childs:
+            index = self.text.find('{}', start)
+            start = index + 2
+
+            if child == target:
+                return search(r'\s*', self.text[index - 1::-1]).group(0)
 
     def lint_keep_indents_on_empty_lines(self, template: Template):
         """Метод для Template.keep_indents_on_empty_lines
@@ -570,6 +667,8 @@ class Tag:
 
     def get_col(self) -> int:
         """Вертає позицію тега на лінії"""
+        if not self.parent:
+            return 1
         return self.parent._get_col(self)
 
     def _get_col(self, target: 'Tag') -> int:
