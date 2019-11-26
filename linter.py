@@ -409,6 +409,9 @@ class Tag:
         Метод який віддає кількість строчок цього тега
     lint_continuation_indend(template: Template)
         Робить відступи перед атрибутами тегу на нових строчках
+    lint_insert_new_line_before(self, template: Template):
+        Метод який переносить на нову строку тег якщо він є 
+        у списку тегів які треба переносити на нову строку
     """
 
     def __init__(self, name: str, text: str, parent: Optional['Tag']):
@@ -432,6 +435,7 @@ class Tag:
     def lint(self, template: Template):
         """Метод який послідовно запускає методи форматування текста"""
 
+        self.lint_insert_new_line_before(template)
         self.lint_indents(template)
         self.lint_continuation_indend(template)
         self.lint_keep_indents_on_empty_lines(template)
@@ -440,6 +444,13 @@ class Tag:
 
         for child in self.childs:
             child.lint(template)
+
+    def lint_insert_new_line_before(self, template: Template):
+        """Метод який переносить на нову строку тег якщо він є 
+        у списку тегів які треба переносити на нову строку"""
+
+        if self.name in template.insert_new_line_before:
+            self.replace_space_before_tag('\n')
 
     def lint_continuation_indend(self, template: Template):
         """Робить відступи перед атрибутами тегу на нових строчках"""
