@@ -2,7 +2,7 @@
 
 """
 
-__version__ = "0.1.6"
+__version__ = "0.1.7"
 
 from os import system
 from os import walk
@@ -468,7 +468,8 @@ class Tag:
         """Робить відступи перед атрибутами тегу на нових строчках"""
 
         old_tag_string = self.get_tag_string()
-        indents = ' ' * (self.get_col() - 1 + template.continuation_indend)
+        indents = ' ' * (self.get_indent_col() - 1 + 
+                         template.continuation_indend)
         new_tag_string = sub(r'(?<=\n)\s*', indents, old_tag_string)
         self.text = self.text.replace(old_tag_string, new_tag_string)
 
@@ -476,6 +477,14 @@ class Tag:
         """Метод який віддає кількість строчок цього тега"""
 
         return 1 + self.get_text().count('\n')
+
+    def get_indent_col(self) -> int:
+        if not self.parent:
+            return 1
+        if self.get_space_before_tag().__contains__('\n'):
+            return self.get_col()
+        else:
+            return self.parent.get_indent_col()
 
     def lint_indents(self, template: Template):
         """Method який робить відступи від батька"""
@@ -487,7 +496,7 @@ class Tag:
         if not space_before_tag.__contains__('\n'):
             return
 
-        indents = int((self.parent.get_col() - 1) / template.indent)
+        indents = int((self.parent.get_indent_col() - 1) / template.indent)
 
         # Не відступати якщо родич є у списку тегів від яких не відступати
         dont_indent = (self.parent.name in template.dont_indent_child + [''])
@@ -854,7 +863,7 @@ class Html(HTMLParser):
 
     def handle_starttag(self, tag: str, attrs: dict):
         """Метод ловить початкові теги"""
-        
+
         tag = Tag(tag, self.get_starttag_text(), self._opened_tags[-1])
         self._opened_tags[-1].childs.append(tag)
         self._opened_tags[-1].text += '{}'
