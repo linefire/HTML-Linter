@@ -2,7 +2,7 @@
 
 """
 
-__version__ = "0.1.7"
+__version__ = "0.1.8"
 
 from os import system
 from os import walk
@@ -416,6 +416,12 @@ class Tag:
     lint_remove_new_line_before(template: Template)
         Метод видаляє перенос на нову строку якщо тег є 
         у списку тегів які не треба переносити на нову строку
+    get_indent_col() : int
+        Метод визначає відступи на лінії
+    get_max_col_in_text_tag() : int
+        Метод визначає максимальну дліну текста тега
+    lint_hard_wrap(template: Template)
+        Метод переносить тег на строку, якщо длліна тексту тега завелика
     """
 
     def __init__(self, name: str, text: str, parent: Optional['Tag']):
@@ -439,6 +445,7 @@ class Tag:
     def lint(self, template: Template):
         """Метод який послідовно запускає методи форматування текста"""
 
+        self.lint_hard_wrap(template)
         self.lint_remove_new_line_before(template)
         self.lint_insert_new_line_before(template)
         self.lint_indents(template)
@@ -449,6 +456,30 @@ class Tag:
 
         for child in self.childs:
             child.lint(template)
+
+    def get_max_col_in_text_tag(self) -> int:
+        """Метод визначає максимальну дліну текста тега"""
+
+        text = self.get_text()
+        max_col = 0
+        col = self.get_col()
+        for char in text:
+            if col > max_col:
+                max_col = col
+            if char == '\n':
+                col = 0
+            else:
+                col += 1
+        return max_col
+
+    def lint_hard_wrap(self, template: Template):
+        """Метод переносить тег на строку, якщо длліна тексту тега завелика"""
+
+        if self.get_max_col_in_text_tag() <= template.hard_wrap_column:
+            return
+
+        self.replace_space_before_tag('\n')
+        self.text = sub(r'\s*(?=<\/)', '\n', self.text)
 
     def lint_remove_new_line_before(self, template: Template):
         """Метод видаляє перенос на нову строку якщо тег є 
@@ -479,6 +510,8 @@ class Tag:
         return 1 + self.get_text().count('\n')
 
     def get_indent_col(self) -> int:
+        """Метод визначає відступи на лінії"""
+
         if not self.parent:
             return 1
         if self.get_space_before_tag().__contains__('\n'):
