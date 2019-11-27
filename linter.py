@@ -431,6 +431,8 @@ class Tag:
         наступні строчки
     lint_chop_down_attributies_always(template: Template)
         Переносить всі атрибути послідовно на наступні строчки
+    lint_align_attributes(template: Template)
+        Метод для вирівнювання атрібутів на наступних строчках
     """
 
     def __init__(self, name: str, text: str, parent: Optional['Tag']):
@@ -460,13 +462,42 @@ class Tag:
         self.lint_indents(template)
         self.lint_wrap_attributies(template)
         self.lint_continuation_indend(template)
+        self.lint_align_attributes(template)
         self.lint_keep_indents_on_empty_lines(template)
         self.lint_smart_tab(template)
         self.lint_use_tab_character(template)
 
         for child in self.childs:
             child.lint(template)
+    
+    def lint_align_attributes(self, template: Template):
+        """Метод для вирівнювання атрібутів на наступних строчках"""
 
+        if not template.align_attributes:
+            return
+
+        tag_string = self.get_tag_string()
+        first_tag_space_match = search(
+            r'(\s+)(?=[\w-]+\=(\"|\')[^\"\']*(\"|\'))', 
+            tag_string,
+        )
+
+        if not first_tag_space_match:
+            return
+
+        if first_tag_space_match.group(1).__contains__('\n'):
+            indents = len(first_tag_space_match.group(1)) - 1
+        else:
+            indents = self.get_col() + first_tag_space_match.end(1) - 1
+        
+        new_tag_string = sub(
+            r'(?<=\n)(\s+)([\w-]+\=(\"|\')[^\"\']*(\"|\'))',
+            r'{}\g<2>'.format(' ' * indents),
+            tag_string,
+        )
+
+        self.text = self.text.replace(tag_string, new_tag_string)
+        
     def lint_wrap_attributies(self, template: Template):
         """Метод форматування для Template.wrap_attributes"""
         if template.wrap_attributes == template.NONE:
