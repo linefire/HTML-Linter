@@ -2,7 +2,7 @@
 
 """
 
-__version__ = "0.1.8"
+__version__ = "0.1.9"
 
 from os import system
 from os import walk
@@ -136,7 +136,7 @@ class Template:
         self.keep_line_breaks: bool = True
         self.keep_line_breaks_in_text: bool = True
         self.keep_blank_lines: int = 2
-        self.wrap_attributes: int = self.WRAP_IF_LONG
+        self.wrap_attributes: int = self.CHOP_DOWN_IF_LONG
         self.wrap_text: bool = True
         self.align_attributes: bool = True
         self.align_text: bool = False
@@ -422,6 +422,15 @@ class Tag:
         Метод визначає максимальну дліну текста тега
     lint_hard_wrap(template: Template)
         Метод переносить тег на строку, якщо длліна тексту тега завелика
+    lint_wrap_attributies(template: Template)
+        Метод форматування для Template.wrap_attributes
+    lint_wrap_attributies_if_long(template: Template)
+        Переносить атрібут тега якщо він залазить за ліміт
+    lint_chop_down_attributies_if_long(template: Template)
+        Якщо дліна тегу завелика то переносить теги послідовно на 
+        наступні строчки
+    lint_chop_down_attributies_always(template: Template)
+        Переносить всі атрибути послідовно на наступні строчки
     """
 
     def __init__(self, name: str, text: str, parent: Optional['Tag']):
@@ -449,6 +458,7 @@ class Tag:
         self.lint_remove_new_line_before(template)
         self.lint_insert_new_line_before(template)
         self.lint_indents(template)
+        self.lint_wrap_attributies(template)
         self.lint_continuation_indend(template)
         self.lint_keep_indents_on_empty_lines(template)
         self.lint_smart_tab(template)
@@ -456,6 +466,84 @@ class Tag:
 
         for child in self.childs:
             child.lint(template)
+
+    def lint_wrap_attributies(self, template: Template):
+        """Метод форматування для Template.wrap_attributes"""
+        if template.wrap_attributes == template.NONE:
+            return
+
+        elif template.wrap_attributes == template.WRAP_IF_LONG:
+            self.lint_wrap_attributies_if_long(template)
+
+        elif template.wrap_attributes == template.CHOP_DOWN_IF_LONG:
+            self.lint_chop_down_attributies_if_long(template)
+
+        elif template.wrap_attributes == template.WRAP_ALWAYS:
+            self.lint_chop_down_attributies_always(template)
+
+    def lint_wrap_attributies_if_long(self, template: Template):
+        """Переносить атрібут тега якщо він залазить за ліміт"""
+
+        tag_col = self.get_col()
+        tag_string = self.get_tag_string()
+        new_tag_string = tag_string
+        last_space_index = -1
+        lock_quote = False
+        lock_double_qoute = False
+        while True:
+            col = tag_col
+            for index, char in enumerate(new_tag_string[:]):
+                if char == '\n':
+                    col = 0
+                    continue
+
+                if char == ' ':
+                    if not lock_quote and not lock_double_qoute:
+                        last_space_index = index
+                elif char == '"':
+                    lock_double_qoute = not lock_double_qoute
+                elif char == "'":
+                    lock_quote = not lock_quote
+                
+                col += 1
+
+                if col > template.hard_wrap_column:
+                    if last_space_index != -1:
+                        new_tag_string = (new_tag_string[:last_space_index] +
+                                '\n' + new_tag_string[last_space_index + 1:])
+                        break
+            else:
+                break
+
+        self.text = self.text.replace(tag_string, new_tag_string)
+
+    def lint_chop_down_attributies_if_long(self, template: Template):
+        """Якщо дліна тегу завелика то переносить теги послідовно на 
+        наступні строчки"""
+
+        col = self.get_col()
+        tag_string = self.get_tag_string()
+        if col + len(tag_string) > template.hard_wrap_column:
+            self.lint_chop_down_attributies_always(template)
+
+    def lint_chop_down_attributies_always(self, template: Template):
+        """Переносить всі атрибути послідовно на наступні строчки"""
+
+        tag_string = self.get_tag_string()
+        saved_match = search(r'<\w+\s+', tag_string)
+        if not saved_match:
+            return
+
+        saved_tag_string = tag_string[:saved_match.end()]
+        attributies_string = tag_string[saved_match.end():]
+
+        attributies_string = sub(r'(\s+)([\w-]+\=(\"|\')[^\"\']*(\"|\'))',
+                                 r'\n\g<2>', attributies_string)
+
+        new_tag_string = saved_tag_string + attributies_string
+
+        self.text = self.text.replace(tag_string, new_tag_string)
+
 
     def get_max_col_in_text_tag(self) -> int:
         """Метод визначає максимальну дліну текста тега"""
@@ -473,10 +561,17 @@ class Tag:
         return max_col
 
     def lint_hard_wrap(self, template: Template):
-        """Метод переносить тег на строку, якщо длліна тексту тега завелика"""
+        """Метод переносить тег на строку, якщо дліна тексту тега завелика"""
+
+        if self.name in template.inline_elements:
+            return
 
         if self.get_max_col_in_text_tag() <= template.hard_wrap_column:
             return
+
+        if not self.get_space_before_tag().__contains__('\n'):
+            if self.name in template.dont_break_if_inline_content:
+                return
 
         self.replace_space_before_tag('\n')
         self.text = sub(r'\s*(?=<\/)', '\n', self.text)
