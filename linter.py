@@ -2,7 +2,7 @@
 
 """
 
-__version__ = "0.1.9"
+__version__ = "0.1.10"
 
 from os import system
 from os import walk
@@ -139,7 +139,7 @@ class Template:
         self.wrap_attributes: int = self.CHOP_DOWN_IF_LONG
         self.wrap_text: bool = True
         self.align_attributes: bool = True
-        self.align_text: bool = False
+        self.align_text: bool = True
         self.keep_white_spaces: bool = False
         self.space_around_eq_in_attribute: bool = False
         self.space_after_tag_name: bool = False
@@ -433,6 +433,12 @@ class Tag:
         Переносить всі атрибути послідовно на наступні строчки
     lint_align_attributes(template: Template)
         Метод для вирівнювання атрібутів на наступних строчках
+    get_text_string() : str
+        Віддає текст тегу, без дочірніх тегів
+    get_length_first_line() : (int, bool)
+        Метод вертає дліну першої строчки тега
+    lint_wrap_text(template: Template)
+        Метод який форматує текст в тегах
     """
 
     def __init__(self, name: str, text: str, parent: Optional['Tag']):
@@ -463,12 +469,122 @@ class Tag:
         self.lint_wrap_attributies(template)
         self.lint_continuation_indend(template)
         self.lint_align_attributes(template)
+        self.lint_wrap_text(template)
         self.lint_keep_indents_on_empty_lines(template)
         self.lint_smart_tab(template)
         self.lint_use_tab_character(template)
 
         for child in self.childs:
             child.lint(template)
+
+    def lint_wrap_text(self, template: Template):
+        """Метод який форматує текст в тегах"""
+
+        if not template.wrap_text:
+            return
+
+        tag_col = self.get_col()
+        tag_string = self.get_tag_string()
+        if tag_string.endswith('/>'):
+            return
+        source_text = self.get_text_string()
+        begin_col = tag_col + len(tag_string)
+        if template.align_text:
+            indents = begin_col - 1
+            for char in source_text:
+                if char == '\n':
+                    indents = 0
+                elif char == ' ':
+                    indents += 1
+                else:
+                    break
+        else:
+            indents = self.get_indent_col() + template.indent - 1
+        
+        text = source_text
+        text = sub(r'\n\s+', '\n' + ' ' * indents, text)
+        while True:
+            child = 0
+            col = begin_col
+            last_space = 0
+            for i, char in enumerate(text[:]):
+                if char == '\n':
+                    col = 0
+                elif char == ' ':
+                    last_space = i
+                    col += 1
+                elif char == '{':
+                    if text[i + 1] != '}':
+                        col += 1
+                        continue
+                    
+                    length, _ = self.childs[child].get_length_first_line()
+                    col = length + col - 1                
+                    child += 1
+                else:
+                    col += 1
+
+                if col > template.hard_wrap_column:
+
+                    check_new_line = False
+                    for c in reversed(text[:last_space]):
+                        if c == '\n':
+                            check_new_line = True
+                            break
+                        elif c != ' ':
+                            break
+
+                    if check_new_line:
+                        continue
+                    
+                    if last_space != 0:
+                        text = (
+                            text[:last_space] + '\n' +
+                            ' ' * indents + text[last_space + 1:]
+                        )
+                    else:
+                        text = '\n' + ' ' * indents + text
+                    break
+            
+            else:
+                break
+        
+        self.text = self.text.replace(source_text, text)
+
+    def get_length_first_line(self) -> (int, bool):
+        """Метод вертає дліну першої строчки тега"""
+
+        length = 0
+        current_child = 0
+        for i, char in enumerate(self.text):
+            if char == '{' and self.text[i + 1] == '}':
+                (
+                    length_child, 
+                    is_end,
+                ) = self.childs[current_child].get_length_first_line()
+                length += length_child
+                if is_end:
+                    return length, True
+                else:
+                    current_child += 1
+                    length -= 1
+            elif char == '\n':
+                return length, True
+            else:
+                length += 1
+        else:
+            return length, False
+
+    def get_text_string(self) -> str:
+        """Віддає текст тегу, без дочірніх тегів"""
+
+        tag_string = self.get_tag_string()
+        end_tag = search(r'\s+\<\/' ,self.text)
+        if end_tag:
+            text_string = self.text[len(tag_string):end_tag.start()]
+        else:
+            text_string = self.text[len(tag_string):]
+        return text_string
     
     def lint_align_attributes(self, template: Template):
         """Метод для вирівнювання атрібутів на наступних строчках"""
