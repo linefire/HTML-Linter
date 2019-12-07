@@ -2,7 +2,7 @@
 
 """
 
-__version__ = "0.1.10"
+__version__ = "0.1.11"
 
 from os import system
 from os import walk
@@ -462,6 +462,7 @@ class Tag:
     def lint(self, template: Template):
         """Метод який послідовно запускає методи форматування текста"""
 
+        self.lint_space_around_eq_in_attribute(template)
         self.lint_hard_wrap(template)
         self.lint_remove_new_line_before(template)
         self.lint_insert_new_line_before(template)
@@ -476,6 +477,14 @@ class Tag:
 
         for child in self.childs:
             child.lint(template)
+
+    def lint_space_around_eq_in_attribute(self, template: Template):
+        tag_string = self.get_tag_string()
+        if template.space_around_eq_in_attribute:
+            new_tag_string = sub(r'\s*\=\s*(\"|\')', r' = \g<1>', tag_string)
+        else:
+            new_tag_string = sub(r'\s*\=\s*(\"|\')', r'=\g<1>', tag_string)
+        self.text = self.text.replace(tag_string, new_tag_string)
 
     def lint_wrap_text(self, template: Template):
         """Метод який форматує текст в тегах"""
