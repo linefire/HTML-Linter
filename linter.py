@@ -2,7 +2,7 @@
 
 """
 
-__version__ = "0.1.14"
+__version__ = "0.1.15"
 
 from os import system
 from os import walk
@@ -89,7 +89,7 @@ class Template:
     new_line_before_first_attr : bool
         Вставляти нову строку перед першим тегом, 
         якщо тег занімає більше ніж 1 строку?
-    new_line_before_last_attr : bool
+    new_line_after_last_attr : bool
         Вставляти нову строку після останнього тега, 
         якщо тег занімає більше ніж 1 строку?
     generate_quote_marks : int
@@ -158,8 +158,8 @@ class Template:
         self.keep_white_space_inside: List[str] = ['span', 'pre', 'textarea']
         self.dont_break_if_inline_content: List[str] = ['title', 'h1', 'h2',
                                                 'h3', 'h4', 'h5', 'h6', 'p']
-        self.new_line_before_first_attr: bool = True
-        self.new_line_before_last_attr: bool = False
+        self.new_line_before_first_attr: bool = False
+        self.new_line_after_last_attr: bool = True
         self.generate_quote_marks: int = self.DOUBLE
 
     @classmethod
@@ -210,7 +210,7 @@ class Template:
             'keep_white_space_inside': self.keep_white_space_inside,
             'dont_break_if_inline_content': self.dont_break_if_inline_content,
             'new_line_before_first_attr': self.new_line_before_first_attr,
-            'new_line_before_last_attr': self.new_line_before_last_attr,
+            'new_line_after_last_attr': self.new_line_after_last_attr,
             'generate_quote_marks': self.generate_quote_marks,
         }
 
@@ -356,9 +356,9 @@ class Template:
             'new_line_before_first_attr', 
             template.new_line_before_first_attr,
         )
-        template.new_line_before_last_attr = data.get(
-            'new_line_before_last_attr', 
-            template.new_line_before_last_attr,
+        template.new_line_after_last_attr = data.get(
+            'new_line_after_last_attr', 
+            template.new_line_after_last_attr,
         )
         template.generate_quote_marks = data.get(
             'generate_quote_marks', 
@@ -471,9 +471,6 @@ class Tag:
     def lint(self, template: Template):
         """Метод який послідовно запускає методи форматування текста"""
 
-        
-        self.lint_space_in_empty_tag(template)
-        self.lint_space_after_tag_name(template)
         self.lint_space_around_eq_in_attribute(template)
         self.lint_hard_wrap(template)
         self.lint_remove_new_line_before(template)
@@ -481,6 +478,9 @@ class Tag:
         self.lint_indents(template)
         self.lint_wrap_attributies(template)
         self.lint_new_line_before_first_attr(template)
+        self.lint_new_line_after_last_attr(template)
+        self.lint_space_in_empty_tag(template)
+        self.lint_space_after_tag_name(template)
         self.lint_continuation_indend(template)
         self.lint_align_attributes(template)
         self.lint_wrap_text(template)
@@ -491,6 +491,20 @@ class Tag:
         for child in self.childs:
             child.lint(template)
 
+    def lint_new_line_after_last_attr(self, template: Template):
+        """Метод добавляє перенос строки після останнього атрібута якщо 
+        тег не на одній строчці"""
+
+        tag_string = self.get_tag_string()
+        if tag_string.__contains__('\n'):
+            if template.new_line_before_first_attr:
+                new_tag_string = sub(r'\s*(?=(\/\>|(?<!\/)\>))',
+                    r'\n', tag_string)
+            else:
+                new_tag_string = sub(r'\n *(?=(\/\>|(?<!\/)\>))', 
+                    r'', tag_string)
+            self.text = self.text.replace(tag_string, new_tag_string)
+
     def lint_new_line_before_first_attr(self, template: Template):
         """Метод добавляє перенос строки перед першим атрібутом якщо 
         тег не на одній строчці"""
@@ -499,25 +513,25 @@ class Tag:
         if tag_string.__contains__('\n'):
             if template.new_line_before_first_attr:
                 new_tag_string = sub(r'(<\w+)(\s+)(\w+)',
-                    '\g<1>\n\g<3>', tag_string)
+                    r'\g<1>\n\g<3>', tag_string)
             else:
                 new_tag_string = sub(r'(<\w+)(\s+)(\w+)', 
-                    '\g<1> \g<3>', tag_string)
+                    r'\g<1> \g<3>', tag_string)
             self.text = self.text.replace(tag_string, new_tag_string)
 
     def lint_space_in_empty_tag(self, template: Template):
         """Метод добавляє відступ після імені тегу у пустих тегах"""
         if template.space_in_empty_tag:
-            self.text = sub(r'\s*(?=\/\>)', ' ', self.text)
+            self.text = sub(r' *(?=\/\>)', ' ', self.text)
         else:
-            self.text = sub(r'\s*(?=\/\>)', '', self.text)
+            self.text = sub(r' *(?=\/\>)', '', self.text)
 
     def lint_space_after_tag_name(self, template: Template):
         """Метод добавляє відступ після імені тегу"""
         if template.space_after_tag_name:
-            self.text = sub(r'\s*(?=(\/\>|(?<!\/)\>))', ' ', self.text)
+            self.text = sub(r' *(?=(\/\>|(?<!\/)\>))', ' ', self.text)
         else:
-            self.text = sub(r'\s*(?=(\/\>|(?<!\/)\>))', '', self.text)
+            self.text = sub(r' *(?=(\/\>|(?<!\/)\>))', '', self.text)
 
     def lint_space_around_eq_in_attribute(self, template: Template):
         """Метод добавляє відступи біля знака '=' у атрібутах тегу"""
