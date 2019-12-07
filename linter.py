@@ -2,7 +2,7 @@
 
 """
 
-__version__ = "0.1.11"
+__version__ = "0.1.12"
 
 from os import system
 from os import walk
@@ -142,7 +142,7 @@ class Template:
         self.align_text: bool = True
         self.keep_white_spaces: bool = False
         self.space_around_eq_in_attribute: bool = False
-        self.space_after_tag_name: bool = False
+        self.space_after_tag_name: bool = True
         self.space_in_empty_tag: bool = False
         self.insert_new_line_before: List[str] = ['body', 'div', 'p', 'form',
                                                   'h1', 'h2', 'h3']
@@ -439,6 +439,10 @@ class Tag:
         Метод вертає дліну першої строчки тега
     lint_wrap_text(template: Template)
         Метод який форматує текст в тегах
+    lint_space_around_eq_in_attribute(template: Template)
+        Метод добавляє відступи біля знака '=' у атрібутах тегу
+    lint_space_after_tag_name(template: Template)
+        Метод добавляє відступ після імені тегу
     """
 
     def __init__(self, name: str, text: str, parent: Optional['Tag']):
@@ -462,6 +466,7 @@ class Tag:
     def lint(self, template: Template):
         """Метод який послідовно запускає методи форматування текста"""
 
+        self.lint_space_after_tag_name(template)
         self.lint_space_around_eq_in_attribute(template)
         self.lint_hard_wrap(template)
         self.lint_remove_new_line_before(template)
@@ -478,7 +483,15 @@ class Tag:
         for child in self.childs:
             child.lint(template)
 
+    def lint_space_after_tag_name(self, template: Template):
+        """Метод добавляє відступ після імені тегу"""
+        if template.space_after_tag_name:
+            self.text = sub(r'\s*(?=(\/\>|(?<!\/)\>))', ' ', self.text)
+        else:
+            self.text = sub(r'\s*(?=(\/\>|(?<!\/)\>))', '', self.text)
+
     def lint_space_around_eq_in_attribute(self, template: Template):
+        """Метод добавляє відступи біля знака '=' у атрібутах тегу"""
         tag_string = self.get_tag_string()
         if template.space_around_eq_in_attribute:
             new_tag_string = sub(r'\s*\=\s*(\"|\')', r' = \g<1>', tag_string)
