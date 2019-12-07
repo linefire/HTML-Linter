@@ -2,7 +2,7 @@
 
 """
 
-__version__ = "0.1.12"
+__version__ = "0.1.13"
 
 from os import system
 from os import walk
@@ -142,8 +142,8 @@ class Template:
         self.align_text: bool = True
         self.keep_white_spaces: bool = False
         self.space_around_eq_in_attribute: bool = False
-        self.space_after_tag_name: bool = True
-        self.space_in_empty_tag: bool = False
+        self.space_after_tag_name: bool = False
+        self.space_in_empty_tag: bool = True
         self.insert_new_line_before: List[str] = ['body', 'div', 'p', 'form',
                                                   'h1', 'h2', 'h3']
         self.remove_new_line_before: List[str] = ['br']
@@ -443,6 +443,8 @@ class Tag:
         Метод добавляє відступи біля знака '=' у атрібутах тегу
     lint_space_after_tag_name(template: Template)
         Метод добавляє відступ після імені тегу
+    lint_space_in_empty_tag(self, template: Template):
+        Метод добавляє відступ після імені тегу у пустих тегах
     """
 
     def __init__(self, name: str, text: str, parent: Optional['Tag']):
@@ -466,6 +468,7 @@ class Tag:
     def lint(self, template: Template):
         """Метод який послідовно запускає методи форматування текста"""
 
+        self.lint_space_in_empty_tag(template)
         self.lint_space_after_tag_name(template)
         self.lint_space_around_eq_in_attribute(template)
         self.lint_hard_wrap(template)
@@ -482,6 +485,13 @@ class Tag:
 
         for child in self.childs:
             child.lint(template)
+
+    def lint_space_in_empty_tag(self, template: Template):
+        """Метод добавляє відступ після імені тегу у пустих тегах"""
+        if template.space_in_empty_tag:
+            self.text = sub(r'\s*(?=\/\>)', ' ', self.text)
+        else:
+            self.text = sub(r'\s*(?=\/\>)', '', self.text)
 
     def lint_space_after_tag_name(self, template: Template):
         """Метод добавляє відступ після імені тегу"""
