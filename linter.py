@@ -2,12 +2,13 @@
 
 """
 
-__version__ = "0.1.15"
+__version__ = "0.2"
 
 from os import system
 from os import walk
 from os import makedirs
 from os import listdir
+from os import remove
 from os.path import exists
 from os.path import join
 from json import dump
@@ -99,6 +100,8 @@ class Template:
             NONE - Не заміняти
     TEMPLATES_DIR : str
         Шлях до каталогу з шаблонами
+    is_default: bool
+        Якщо це шаблон за замовчування True
 
     Methods
     -------
@@ -125,8 +128,9 @@ class Template:
     DOUBLE: int = 1
     NONE: int = 3
 
-    def __init__(self):
+    def __init__(self, is_default: bool = True):
         self.name: str = 'default'
+        self.is_default: bool = is_default
         self.use_tab_character: bool = False
         self.smart_tab: bool = False
         self.indent: int = 4
@@ -136,10 +140,10 @@ class Template:
         self.keep_line_breaks: bool = True
         self.keep_line_breaks_in_text: bool = True
         self.keep_blank_lines: int = 2
-        self.wrap_attributes: int = self.CHOP_DOWN_IF_LONG
+        self.wrap_attributes: int = self.WRAP_IF_LONG
         self.wrap_text: bool = True
         self.align_attributes: bool = True
-        self.align_text: bool = True
+        self.align_text: bool = False
         self.keep_white_spaces: bool = False
         self.space_around_eq_in_attribute: bool = False
         self.space_after_tag_name: bool = False
@@ -159,7 +163,7 @@ class Template:
         self.dont_break_if_inline_content: List[str] = ['title', 'h1', 'h2',
                                                 'h3', 'h4', 'h5', 'h6', 'p']
         self.new_line_before_first_attr: bool = False
-        self.new_line_after_last_attr: bool = True
+        self.new_line_after_last_attr: bool = False
         self.generate_quote_marks: int = self.DOUBLE
 
     @classmethod
@@ -172,7 +176,7 @@ class Template:
             Ім'я нового шаблону
         """
 
-        new_template = cls()
+        new_template = cls(False)
         new_template.name = name
         new_template.save()
 
@@ -200,7 +204,7 @@ class Template:
             'align_text': self.align_text,
             'keep_white_spaces': self.keep_white_spaces,
             'space_around_eq_in_attribute': self.space_around_eq_in_attribute,
-            'self.space_after_tag_name': self.space_after_tag_name,
+            'space_after_tag_name': self.space_after_tag_name,
             'space_in_empty_tag': self.space_in_empty_tag,
             'insert_new_line_before': self.insert_new_line_before,
             'remove_new_line_before': self.remove_new_line_before,
@@ -250,7 +254,7 @@ class Template:
         with open(join(cls.TEMPLATES_DIR, name + '.json'), 'r') as file:
             data: dict = load(file)
 
-        template = Template()
+        template = Template(False)
 
         template.name = data.get(
             'name', 
@@ -1404,12 +1408,696 @@ class Linter:
                 break
             elif command == '1':
                 self._select_template_menu()
+            elif command == '2':
+                self._edit_template_menu()
             elif command == '3':
                 self._create_template_menu()
+            elif command == '4':
+                self.delete_template()
             else:
                 print('Невірна команда.')
                 input('\nНатисніть Enter щоби продовжити.')
                 continue
+
+    def _edit_template_menu(self):
+        if self.current_template.is_default:
+            print('Неможливо редагувати шаблон за замовчуванням')
+            input('\nНатисніть Enter щоби продовжити.')
+            return
+
+        while True:
+            system('cls')
+            print('HTML Linter v{}'.format(__version__))
+            print('Вибраний шаблон: {}'.format(self.current_template.name))
+            print('1. Використовувати табуляцію замість пробілів: {}'.format(
+                ('Так' if self.current_template.use_tab_character else 'Ні')
+            ))
+            print('2. Використовувати розумну табуляцію: {}'.format(
+                ('Так' if self.current_template.smart_tab else 'Ні')
+            ))
+            print('3. Кількість відступів для дочірніх тегів: {}'.format(
+                self.current_template.indent
+            ))
+            print('4. Кількість відступів для атрибутів: {}'.format(
+                self.current_template.continuation_indend
+            ))
+            print('5. Зберігати відступи на пустих строчках: {}'.format(
+                ('Так' if self.current_template.keep_indents_on_empty_lines else 'Ні')
+            ))
+            print('6. Ділити строчки після стовбчика: {}'.format(
+                self.current_template.hard_wrap_column
+            ))
+            print('7. Зберігати перенос строки: {}'.format(
+                ('Так' if self.current_template.keep_line_breaks else 'Ні')
+            ))
+            print('8. Зберігати перенос строки у тексті: {}'.format(
+                ('Так' if self.current_template.keep_line_breaks_in_text else 'Ні')
+            ))
+            print('9. Кількість порожніх строк що треба зберігати: {}'.format(
+                self.current_template.keep_blank_lines
+            ))
+            if self.current_template.wrap_attributes == Template.DO_NOT_WRAP:
+                print('10. Перенос атрибутів: Не переносити')
+            elif self.current_template.wrap_attributes == Template.WRAP_IF_LONG:
+                print('10. Перенос атрибутів: Якщо тег довгий')
+            elif self.current_template.wrap_attributes == Template.CHOP_DOWN_IF_LONG:
+                print('10. Перенос атрибутів: Якщо тег довгий, переносити всі атрибути')
+            elif self.current_template.wrap_attributes == Template.WRAP_ALWAYS:
+                print('10. Перенос атрибутів: Переносити всі атрибути')
+            print('11. Переносити текст на наступні строчки: {}'.format(
+                ('Так' if self.current_template.wrap_text else 'Ні')
+            ))
+            print('12. Вирівнювати атрибути: {}'.format(
+                ('Так' if self.current_template.align_attributes else 'Ні')
+            ))
+            print('13. Вирівнювати текст: {}'.format(
+                ('Так' if self.current_template.align_text else 'Ні')
+            ))
+            print('14. Зберігати табуляцію: {}'.format(
+                ('Так' if self.current_template.keep_white_spaces else 'Ні')
+            ))
+            print('15. Вставити пробіл навколо "=" у атрибутах: {}'.format(
+                ('Так' if self.current_template.space_around_eq_in_attribute else 'Ні')
+            ))
+            print('16. Вставити пробіл після назви тегу: {}'.format(
+                ('Так' if self.current_template.space_after_tag_name else 'Ні')
+            ))
+            print('17. Вставити пробіл у порожньому тегу: {}'.format(
+                ('Так' if self.current_template.space_in_empty_tag else 'Ні')
+            ))
+            print('18. Вставити перенос строки перед тегами: {}'.format(
+                str(self.current_template.insert_new_line_before)
+            ))
+            print('19. Видалити перенос строки перед тегами: {}'.format(
+                str(self.current_template.remove_new_line_before)
+            ))
+            print('20. Не робити відступи для дочірніх тегів: {}'.format(
+                str(self.current_template.dont_indent_child)
+            ))
+            print('21. Не робити відступи для дочірніх тегів де кількість строчок більше: {}'.format(
+                self.current_template.dont_indent_child_tag_size
+            ))
+            print('22. Теги які не переносити на іншу строчку: {}'.format(
+                str(self.current_template.inline_elements)
+            ))
+            print('23. Зберігати відступи у тегах: {}'.format(
+                str(self.current_template.keep_white_space_inside)
+            ))
+            print('24. Не ділити тег на строчки: {}'.format(
+                str(self.current_template.dont_break_if_inline_content)
+            ))
+            print('25. Вставити перенос строки перед першим тегом: {}'.format(
+                ('Якщо тег не на одній строчці' if self.current_template.new_line_before_first_attr else 'Ні')
+            ))
+            print('26. Вставити перенос строки після останнього тега: {}'.format(
+                ('Якщо тег не на одній строчці' if self.current_template.new_line_after_last_attr else 'Ні')
+            ))
+            if self.current_template.generate_quote_marks == Template.NONE:
+                print('27. Замінити лапки у атрибутах: Не заміняти')
+            elif self.current_template.generate_quote_marks == Template.SINGLE:
+                print('27. Замінити лапки у атрибутах: На одинарні')
+            elif self.current_template.generate_quote_marks == Template.DOUBLE:
+                print('27. Замінити лапки у атрибутах: На подвійні')
+            print('\n0. Назад')
+
+            command = input('\nВиберіть пункт: ').strip()
+
+            if command == '0':
+                break
+            
+            menus = {
+                '1': self.menu_use_tab_character,
+                '2': self.menu_smart_tab,
+                '3': self.menu_indent,
+                '4': self.menu_continuation_indend,
+                '5': self.menu_keep_indents_on_empty_lines,
+                '6': self.menu_hard_wrap_column,
+                '7': self.menu_keep_line_breaks,
+                '8': self.menu_keep_line_breaks_in_text,
+                '9': self.menu_keep_blank_lines,
+                '10': self.menu_wrap_attributes,
+                '11': self.menu_wrap_text,
+                '12': self.menu_align_attributes,
+                '13': self.menu_align_text,
+                '14': self.menu_keep_white_spaces,
+                '15': self.menu_space_around_eq_in_attribute,
+                '16': self.menu_space_after_tag_name,
+                '17': self.menu_space_in_empty_tag,
+                '18': self.menu_insert_new_line_before,
+                '19': self.menu_remove_new_line_before,
+                '20': self.menu_dont_indent_child,
+                '21': self.menu_dont_indent_child_tag_size,
+                '22': self.menu_inline_elements,
+                '23': self.menu_keep_white_space_inside,
+                '24': self.menu_dont_break_if_inline_content,
+                '25': self.menu_new_line_before_first_attr,
+                '26': self.menu_new_line_after_last_attr,
+                '27': self.menu_generate_quote_marks,
+            }
+            try:
+                menus[command]()
+            except KeyError:
+                print('Невірна команда.')
+                input('\nНатисніть Enter щоби продовжити.')
+
+    def menu_use_tab_character(self):
+        while True:
+            system('cls')
+            print('Використовувати табуляцію замість пробілів?')
+            print('1. Так')
+            print('2. Ні')
+
+            print('\n0. Назад')
+            command = input('\nВиберіть пункт: ').strip()
+
+            if command == '0':
+                break
+            elif command == '1':
+                self.current_template.use_tab_character = True
+                break
+            elif command == '2':
+                self.current_template.use_tab_character = False
+                break
+            else:
+                print('Невірна команда.')
+                input('\nНатисніть Enter щоби продовжити.')
+        self.current_template.save()
+
+    def menu_smart_tab(self):
+        while True:
+            system('cls')
+            print('Використовувати розумну табуляцію?')
+            print('1. Так')
+            print('2. Ні')
+
+            print('\n0. Назад')
+            command = input('\nВиберіть пункт: ').strip()
+
+            if command == '0':
+                break
+            elif command == '1':
+                self.current_template.smart_tab = True
+                break
+            elif command == '2':
+                self.current_template.smart_tab = False
+                break
+            else:
+                print('Невірна команда.')
+                input('\nНатисніть Enter щоби продовжити.')
+        self.current_template.save()
+
+    def menu_indent(self):
+        while True:
+            system('cls')
+            print('Кількість відступів для дочірніх тегів?')
+            command = input('\nВведіть кількість відступів, або нічого щоби повернутися: ').strip()
+
+            if not command:
+                break
+            try:
+                self.current_template.indent = int(command)
+                self.current_template.save()
+            except ValueError:
+                print('Невірна команда.')
+                input('\nНатисніть Enter щоби продовжити.')
+
+    def menu_continuation_indend(self):
+        while True:
+            system('cls')
+            print('Кількість відступів для атрибутів?')
+            command = input('\nВведіть кількість відступів, або нічого щоби повернутися: ').strip()
+
+            if not command:
+                break
+            try:
+                self.current_template.continuation_indend = int(command)
+                self.current_template.save()
+            except ValueError:
+                print('Невірна команда.')
+                input('\nНатисніть Enter щоби продовжити.')
+
+    def menu_keep_indents_on_empty_lines(self):
+        while True:
+            system('cls')
+            print('Зберігати відступи на пустих строчках?')
+            print('1. Так')
+            print('2. Ні')
+
+            print('\n0. Назад')
+            command = input('\nВиберіть пункт: ').strip()
+
+            if command == '0':
+                break
+            elif command == '1':
+                self.current_template.keep_indents_on_empty_lines = True
+                break
+            elif command == '2':
+                self.current_template.keep_indents_on_empty_lines = False
+                break
+            else:
+                print('Невірна команда.')
+                input('\nНатисніть Enter щоби продовжити.')
+        self.current_template.save()
+
+    def menu_hard_wrap_column(self):
+        while True:
+            system('cls')
+            print('Ділити строчки після стовбчика?')
+            command = input('\nВведіть кількість стовбчиків, або нічого щоби повернутися: ').strip()
+
+            if not command:
+                break
+            try:
+                self.current_template.hard_wrap_column = int(command)
+                self.current_template.save()
+            except ValueError:
+                print('Невірна команда.')
+                input('\nНатисніть Enter щоби продовжити.')
+
+    def menu_keep_line_breaks(self):
+        while True:
+            system('cls')
+            print('Зберігати перенос строки?')
+            print('1. Так')
+            print('2. Ні')
+
+            print('\n0. Назад')
+            command = input('\nВиберіть пункт: ').strip()
+
+            if command == '0':
+                break
+            elif command == '1':
+                self.current_template.keep_line_breaks = True
+                break
+            elif command == '2':
+                self.current_template.keep_line_breaks = False
+                break
+            else:
+                print('Невірна команда.')
+                input('\nНатисніть Enter щоби продовжити.')
+        self.current_template.save()
+
+    def menu_keep_line_breaks_in_text(self):
+        while True:
+            system('cls')
+            print('Зберігати перенос строки у тексті?')
+            print('1. Так')
+            print('2. Ні')
+
+            print('\n0. Назад')
+            command = input('\nВиберіть пункт: ').strip()
+
+            if command == '0':
+                break
+            elif command == '1':
+                self.current_template.keep_line_breaks_in_text = True
+                break
+            elif command == '2':
+                self.current_template.keep_line_breaks_in_text = False
+                break
+            else:
+                print('Невірна команда.')
+                input('\nНатисніть Enter щоби продовжити.')
+        self.current_template.save()
+
+    def menu_keep_blank_lines(self):
+        while True:
+            system('cls')
+            print('Кількість порожніх строк що треба зберігати?')
+            command = input('\nВведіть кількість строчок, або нічого щоби повернутися: ').strip()
+
+            if not command:
+                break
+            try:
+                self.current_template.keep_blank_lines = int(command)
+                self.current_template.save()
+            except ValueError:
+                print('Невірна команда.')
+                input('\nНатисніть Enter щоби продовжити.')
+
+    def menu_wrap_attributes(self):
+        while True:
+            system('cls')
+            print('Переносити атрибути?')
+            print('1. Не переносити')
+            print('2. Переносити атрибут якщо він довгий')
+            print('3. Переносити всі атрибути якщо тег довгий')
+            print('4. Переносити атрибути завжди')
+
+            print('\n0. Назад')
+            command = input('\nВиберіть пункт: ').strip()
+
+            if command == '0':
+                break
+            elif command == '1':
+                self.current_template.wrap_attributes = Template.DO_NOT_WRAP
+                break
+            elif command == '2':
+                self.current_template.wrap_attributes = Template.WRAP_IF_LONG
+                break
+            elif command == '3':
+                self.current_template.wrap_attributes = Template.CHOP_DOWN_IF_LONG
+                break
+            elif command == '4':
+                self.current_template.wrap_attributes = Template.WRAP_ALWAYS
+                break
+            else:
+                print('Невірна команда.')
+                input('\nНатисніть Enter щоби продовжити.')
+        self.current_template.save()
+
+    def menu_wrap_text(self):
+        while True:
+            system('cls')
+            print('Переносити текст тега на наступні строчки?')
+            print('1. Так')
+            print('2. Ні')
+
+            print('\n0. Назад')
+            command = input('\nВиберіть пункт: ').strip()
+
+            if command == '0':
+                break
+            elif command == '1':
+                self.current_template.wrap_text = True
+                break
+            elif command == '2':
+                self.current_template.wrap_text = False
+                break
+            else:
+                print('Невірна команда.')
+                input('\nНатисніть Enter щоби продовжити.')
+        self.current_template.save()
+
+    def menu_align_attributes(self):
+        while True:
+            system('cls')
+            print('Вирівнювати атрибути?')
+            print('1. Так')
+            print('2. Ні')
+
+            print('\n0. Назад')
+            command = input('\nВиберіть пункт: ').strip()
+
+            if command == '0':
+                break
+            elif command == '1':
+                self.current_template.align_attributes = True
+                break
+            elif command == '2':
+                self.current_template.align_attributes = False
+                break
+            else:
+                print('Невірна команда.')
+                input('\nНатисніть Enter щоби продовжити.')
+        self.current_template.save()
+
+    def menu_align_text(self):
+        while True:
+            system('cls')
+            print('Вирівнювати текст?')
+            print('1. Так')
+            print('2. Ні')
+
+            print('\n0. Назад')
+            command = input('\nВиберіть пункт: ').strip()
+
+            if command == '0':
+                break
+            elif command == '1':
+                self.current_template.align_text = True
+                break
+            elif command == '2':
+                self.current_template.align_text = False
+                break
+            else:
+                print('Невірна команда.')
+                input('\nНатисніть Enter щоби продовжити.')
+        self.current_template.save()
+
+    def menu_keep_white_spaces(self):
+        while True:
+            system('cls')
+            print('Зберігати табуляцію?')
+            print('1. Так')
+            print('2. Ні')
+
+            print('\n0. Назад')
+            command = input('\nВиберіть пункт: ').strip()
+
+            if command == '0':
+                break
+            elif command == '1':
+                self.current_template.keep_white_spaces = True
+                break
+            elif command == '2':
+                self.current_template.keep_white_spaces = False
+                break
+            else:
+                print('Невірна команда.')
+                input('\nНатисніть Enter щоби продовжити.')
+        self.current_template.save()
+
+    def menu_space_around_eq_in_attribute(self):
+        while True:
+            system('cls')
+            print('Встаити пробіл навколо "=" у атрибутах?')
+            print('1. Так')
+            print('2. Ні')
+
+            print('\n0. Назад')
+            command = input('\nВиберіть пункт: ').strip()
+
+            if command == '0':
+                break
+            elif command == '1':
+                self.current_template.space_around_eq_in_attribute = True
+                break
+            elif command == '2':
+                self.current_template.space_around_eq_in_attribute = False
+                break
+            else:
+                print('Невірна команда.')
+                input('\nНатисніть Enter щоби продовжити.')
+        self.current_template.save()
+
+    def menu_space_after_tag_name(self):
+        while True:
+            system('cls')
+            print('Вставити пробіл після назви тегу?')
+            print('1. Так')
+            print('2. Ні')
+
+            print('\n0. Назад')
+            command = input('\nВиберіть пункт: ').strip()
+
+            if command == '0':
+                break
+            elif command == '1':
+                self.current_template.space_after_tag_name = True
+                break
+            elif command == '2':
+                self.current_template.space_after_tag_name = False
+                break
+            else:
+                print('Невірна команда.')
+                input('\nНатисніть Enter щоби продовжити.')
+        self.current_template.save()
+
+    def menu_space_in_empty_tag(self):
+        while True:
+            system('cls')
+            print('Вставити пробіл у порожніх тегах?')
+            print('1. Так')
+            print('2. Ні')
+
+            print('\n0. Назад')
+            command = input('\nВиберіть пункт: ').strip()
+
+            if command == '0':
+                break
+            elif command == '1':
+                self.current_template.space_in_empty_tag = True
+                break
+            elif command == '2':
+                self.current_template.space_in_empty_tag = False
+                break
+            else:
+                print('Невірна команда.')
+                input('\nНатисніть Enter щоби продовжити.')
+        self.current_template.save()
+
+    def menu_insert_new_line_before(self):
+        while True:
+            system('cls')
+            print('Вставити перенос строки перед тегами: ')
+            print(', '.join(self.current_template.insert_new_line_before))
+
+            command = input('\nВведіть теги через кому, або нічого щоб повернутися: ').strip()
+
+            if not command:
+                break
+            else:
+                self.current_template.insert_new_line_before = command.replace(' ', '').split(',')
+        self.current_template.save()
+
+    def menu_remove_new_line_before(self):
+        while True:
+            system('cls')
+            print('Видалити перенос строки перед тегами: ')
+            print(', '.join(self.current_template.remove_new_line_before))
+
+            command = input('\nВведіть теги через кому, або нічого щоб повернутися: ').strip()
+
+            if not command:
+                break
+            else:
+                self.current_template.remove_new_line_before = command.replace(' ', '').split(',')
+        self.current_template.save()
+
+    def menu_dont_indent_child(self):
+        while True:
+            system('cls')
+            print('Не робити відступи для дочірніх тегів: ')
+            print(', '.join(self.current_template.dont_indent_child))
+
+            command = input('\nВведіть теги через кому, або нічого щоб повернутися: ').strip()
+
+            if not command:
+                break
+            else:
+                self.current_template.dont_indent_child = command.replace(' ', '').split(',')
+        self.current_template.save()
+
+    def menu_dont_indent_child_tag_size(self):
+        while True:
+            system('cls')
+            print('Не робити відступи для дочірніх тегів де кількість строчок більше')
+            command = input('\nВведіть кількість строчок, або нічого щоби повернутися: ').strip()
+
+            if not command:
+                break
+            try:
+                self.current_template.dont_indent_child_tag_size = int(command)
+                self.current_template.save()
+            except ValueError:
+                print('Невірна команда.')
+                input('\nНатисніть Enter щоби продовжити.')
+
+    def menu_inline_elements(self):
+        while True:
+            system('cls')
+            print('Теги які не переносити на іншу строчку: ')
+            print(', '.join(self.current_template.inline_elements))
+
+            command = input('\nВведіть теги через кому, або нічого щоб повернутися: ').strip()
+
+            if not command:
+                break
+            else:
+                self.current_template.inline_elements = command.replace(' ', '').split(',')
+        self.current_template.save()
+
+    def menu_keep_white_space_inside(self):
+        while True:
+            system('cls')
+            print('Зберігати відступи у тегах: ')
+            print(', '.join(self.current_template.keep_white_space_inside))
+
+            command = input('\nВведіть теги через кому, або нічого щоб повернутися: ').strip()
+
+            if not command:
+                break
+            else:
+                self.current_template.keep_white_space_inside = command.replace(' ', '').split(',')
+        self.current_template.save()
+
+    def menu_dont_break_if_inline_content(self):
+        while True:
+            system('cls')
+            print('Не ділити тег на строчки: ')
+            print(', '.join(self.current_template.dont_break_if_inline_content))
+
+            command = input('\nВведіть теги через кому, або нічого щоб повернутися: ').strip()
+
+            if not command:
+                break
+            else:
+                self.current_template.dont_break_if_inline_content = command.replace(' ', '').split(',')
+        self.current_template.save()
+
+    def menu_new_line_before_first_attr(self):
+        while True:
+            system('cls')
+            print('Вставити перенос строки перед першим тегом?')
+            print('1. Якщо тег не на одній строчці')
+            print('2. Ні')
+
+            print('\n0. Назад')
+            command = input('\nВиберіть пункт: ').strip()
+
+            if command == '0':
+                break
+            elif command == '1':
+                self.current_template.new_line_before_first_attr = True
+                break
+            elif command == '2':
+                self.current_template.new_line_before_first_attr = False
+                break
+            else:
+                print('Невірна команда.')
+                input('\nНатисніть Enter щоби продовжити.')
+        self.current_template.save()
+
+    def menu_new_line_after_last_attr(self):
+        while True:
+            system('cls')
+            print('Вставити перенос строки після останнього тега?')
+            print('1. Якщо тег не на одній строчці')
+            print('2. Ні')
+
+            print('\n0. Назад')
+            command = input('\nВиберіть пункт: ').strip()
+
+            if command == '0':
+                break
+            elif command == '1':
+                self.current_template.new_line_after_last_attr = True
+                break
+            elif command == '2':
+                self.current_template.new_line_after_last_attr = False
+                break
+            else:
+                print('Невірна команда.')
+                input('\nНатисніть Enter щоби продовжити.')
+        self.current_template.save()
+
+    def menu_generate_quote_marks(self):
+        while True:
+            system('cls')
+            print('Замінити лапки у атрибутах?')
+            print('1. Не заміняти')
+            print('2. На одинарні')
+            print('3. На подвійні')
+
+            print('\n0. Назад')
+            command = input('\nВиберіть пункт: ').strip()
+
+            if command == '0':
+                break
+            elif command == '1':
+                self.current_template.generate_quote_marks = Template.NONE
+                break
+            elif command == '2':
+                self.current_template.generate_quote_marks = Template.SINGLE
+                break
+            elif command == '3':
+                self.current_template.generate_quote_marks = Template.DOUBLE
+                break
+            else:
+                print('Невірна команда.')
+                input('\nНатисніть Enter щоби продовжити.')
+        self.current_template.save()
 
     def _create_template_menu(self):
         """Відображає в консолі меню для створення шаблону"""
@@ -1466,7 +2154,38 @@ class Linter:
 
                 input('\nНатисніть Enter щоби продовжити.')
                 continue
+    
+    def delete_template(self):
+        while True:
+            system('cls')
+            print('HTML Linter v{}'.format(__version__))
 
+            templates = Template.get_templates()[1:]
+            for num, template in enumerate(templates, start=1):
+                print('{}. {}'.format(num, template))
+
+            print('\n0. Назад')
+
+            try:
+                command = int(input('\nВиберіть шаблон: ').strip())
+            except ValueError:
+                print('Невірна команда.')
+
+                input('\nНатисніть Enter щоби продовжити.')
+                continue
+
+            if command == 0:
+                break
+            elif 1 <= command <= len(templates):
+                if self.current_template.name == templates[command]:
+                    self.current_template = Template()
+                remove(join('templates', templates[command] + '.json'))
+                break
+            else:
+                print('Невірна команда.')
+
+                input('\nНатисніть Enter щоби продовжити.')
+                continue
 
 if __name__ == "__main__":
     linter = Linter()
